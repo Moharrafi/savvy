@@ -1,0 +1,11 @@
+node_modules
+dist
+android
+.git
+.gitignore
+.env
+.env.local
+.vscode
+pnpm-debug.log*
+npm-debug.log*
+*.log
