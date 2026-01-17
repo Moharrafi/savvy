@@ -43,5 +43,12 @@ export const authService = {
   getCurrentUser: (): User | null => {
     const session = localStorage.getItem(SESSION_KEY);
     return session ? JSON.parse(session) : null;
+  },
+
+  changePassword: async (userId: string, currentPassword: string, newPassword: string): Promise<void> => {
+    await request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ userId, currentPassword, newPassword })
+    });
   }
 };

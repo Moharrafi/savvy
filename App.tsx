@@ -5,6 +5,7 @@ import { TransactionHistory } from './components/TransactionHistory';
 import { TransactionModal } from './components/TransactionModal';
 import { AuthScreen } from './components/AuthScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { NotificationCenter, NotificationItem } from './components/NotificationCenter';
 import { authService } from './services/authService';
 import { transactionService } from './services/transactionService';
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [enableAnimations, setEnableAnimations] = useState(true);
   const [enableSounds, setEnableSounds] = useState(true);
   const [pushStatus, setPushStatus] = useState<'unknown' | 'enabled' | 'disabled' | 'unsupported'>('unknown');
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
   
   // Theme State
@@ -275,6 +277,12 @@ const App: React.FC = () => {
     setUnreadCount(0);
     setShowProfileLogoutConfirm(false);
     setShowSettingsLogoutConfirm(false);
+    setIsChangePasswordOpen(false);
+  };
+
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    if (!user) return;
+    await authService.changePassword(user.id, currentPassword, newPassword);
   };
 
   const openModal = (type: TransactionType) => {
@@ -359,12 +367,69 @@ const App: React.FC = () => {
                   Nabung
                 </button>
               </div>
-              <TransactionHistory
-                transactions={transactions.slice(0, 5)}
-                isDarkMode={isDarkMode}
-                title="Aktivitas Terkini"
-                showControls={false}
-              />
+              <div className="space-y-7">
+                <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <TransactionHistory
+                    transactions={transactions.slice(0, 5)}
+                    isDarkMode={isDarkMode}
+                    title="Aktivitas Terkini"
+                    showControls={false}
+                    bottomPadding={false}
+                  />
+                </div>
+                <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className={`text-lg font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Rekap Per User</h3>
+                    <span className="text-xs text-slate-500">Masuk & Keluar</span>
+                  </div>
+                  <div className="space-y-2">
+                  {(() => {
+                    const summary = transactions.reduce<Record<string, { name: string; in: number; out: number }>>((acc, t) => {
+                      const rawName = (t.contributorName || 'Tanpa Nama').trim();
+                      const key = rawName.toLowerCase();
+                      if (!acc[key]) {
+                        acc[key] = { name: rawName || 'Tanpa Nama', in: 0, out: 0 };
+                      }
+                      if (t.type === TransactionType.DEPOSIT) {
+                        acc[key].in += t.amount;
+                      } else {
+                        acc[key].out += t.amount;
+                      }
+                      return acc;
+                    }, {});
+                    const rows = Object.values(summary).sort((a, b) => a.name.localeCompare(b.name));
+                    if (rows.length === 0) {
+                      return (
+                        <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                          Belum ada transaksi.
+                        </p>
+                      );
+                    }
+                    return rows.map((row) => (
+                      <div
+                        key={row.name}
+                        className={`backdrop-blur-sm border rounded-2xl px-4 py-2.5 flex items-center justify-between transition-all active:scale-[0.99] ${
+                          isDarkMode ? 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className={`font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                            {row.name}
+                          </p>
+                          <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                            Total masuk & keluar
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-sm sm:text-base text-emerald-500">+ Rp {row.in.toLocaleString('id-ID')}</p>
+                          <p className="font-bold text-sm sm:text-base text-rose-500">- Rp {row.out.toLocaleString('id-ID')}</p>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                </div>
+              </div>
             </div>
           )}
           {activeTab === 'history' && (
@@ -581,6 +646,7 @@ const App: React.FC = () => {
                 <div className="mt-4 space-y-3">
                   <button
                     type="button"
+                    onClick={() => setIsChangePasswordOpen(true)}
                     className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
                       isDarkMode
                         ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -777,6 +843,12 @@ const App: React.FC = () => {
           isDarkMode={isDarkMode}
           notifications={notificationHistory}
           onClearUnread={() => setUnreadCount(0)}
+        />
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          onSubmit={handleChangePassword}
+          isDarkMode={isDarkMode}
         />
 
       </div>

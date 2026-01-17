@@ -7,6 +7,7 @@ interface TransactionHistoryProps {
   isDarkMode: boolean;
   title?: string;
   showControls?: boolean;
+  bottomPadding?: boolean;
 }
 
 type SortOrder = 'DATE_DESC' | 'DATE_ASC' | 'AMOUNT_DESC' | 'AMOUNT_ASC';
@@ -15,7 +16,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   transactions,
   isDarkMode,
   title = 'Riwayat Transaksi',
-  showControls = true
+  showControls = true,
+  bottomPadding = true
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | TransactionType>('ALL');
@@ -23,6 +25,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('DATE_DESC');
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   // Styles based on theme
   const cardBg = isDarkMode ? 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200';
@@ -102,7 +105,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   );
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className={`space-y-4 ${bottomPadding ? 'pb-24' : ''}`}>
       <div className="flex items-center justify-between px-1">
         <h2 className={`text-lg font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>{title}</h2>
         <span className="text-xs text-slate-500">{filteredAndSortedTransactions.length} Transaksi</span>
@@ -263,7 +266,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           filteredAndSortedTransactions.map((t) => (
             <div 
               key={t.id} 
-              className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center gap-3 transition-all active:scale-[0.99] ${cardBg}`}
+              className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center gap-3 transition-all active:scale-[0.99] cursor-pointer ${cardBg}`}
+              onClick={() => setSelectedTransaction(t)}
             >
               <div className="flex items-center space-x-4 min-w-0 flex-1">
                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 ${
@@ -293,6 +297,58 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           ))
         )}
       </div>
+      {selectedTransaction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedTransaction(null)}
+          ></div>
+          <div className={`relative w-full max-w-sm rounded-2xl p-6 shadow-2xl ${isDarkMode ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Detail Transaksi</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedTransaction(null)}
+                className={`text-sm ${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Tutup
+              </button>
+            </div>
+            <div className={`rounded-xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nama</span>
+                <span className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  {selectedTransaction.contributorName}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Tipe</span>
+                <span className={`text-sm font-semibold ${selectedTransaction.type === TransactionType.DEPOSIT ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {selectedTransaction.type === TransactionType.DEPOSIT ? 'Masuk' : 'Keluar'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nominal</span>
+                <span className={`text-sm font-semibold ${selectedTransaction.type === TransactionType.DEPOSIT ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {selectedTransaction.type === TransactionType.DEPOSIT ? '+' : '-'} Rp {selectedTransaction.amount.toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Tanggal</span>
+                <span className={`text-sm ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                  {new Date(selectedTransaction.date).toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="mt-3">
+                <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Catatan</span>
+                <p className={`text-sm mt-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                  {selectedTransaction.note ? selectedTransaction.note : '-'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
