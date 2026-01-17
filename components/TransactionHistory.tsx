@@ -263,9 +263,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           filteredAndSortedTransactions.map((t) => (
             <div 
               key={t.id} 
-              className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center justify-between transition-all active:scale-[0.99] ${cardBg}`}
+              className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center gap-3 transition-all active:scale-[0.99] ${cardBg}`}
             >
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4 min-w-0 flex-1">
                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center shrink-0 ${
                   t.type === TransactionType.DEPOSIT 
                     ? 'bg-emerald-500/10 text-emerald-500' 
@@ -274,9 +274,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   {t.type === TransactionType.DEPOSIT ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <p className={`font-semibold truncate ${textMain}`}>{t.contributorName}</p>
-                    {t.note && <span className="text-xs text-slate-500 truncate max-w-[60px] sm:max-w-[100px]">({t.note})</span>}
+                    {t.note && <span className="text-xs text-slate-500 truncate max-w-[90px] sm:max-w-[140px]">({t.note})</span>}
                   </div>
                   <div className="flex items-center text-xs text-slate-400 mt-1">
                     <Calendar size={10} className="mr-1" />
@@ -284,7 +284,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   </div>
                 </div>
               </div>
-              <div className={`font-bold text-sm sm:text-base whitespace-nowrap ml-2 ${
+              <div className={`font-bold text-sm sm:text-base whitespace-nowrap text-right shrink-0 ${
                  t.type === TransactionType.DEPOSIT ? 'text-emerald-500' : 'text-rose-500'
               }`}>
                 {t.type === TransactionType.DEPOSIT ? '+' : '-'} Rp {t.amount.toLocaleString('id-ID')}
