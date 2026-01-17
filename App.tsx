@@ -504,6 +504,13 @@ const App: React.FC = () => {
                           : 'Nonaktif'}
                     </span>
                   </div>
+                  {pushStatus === 'enabled' && (
+                    <div className={`w-full rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                      isDarkMode ? 'bg-indigo-500/10 text-indigo-200 border border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                    }`}>
+                      Agar notifikasi muncul melayang di atas layar, aktifkan izin <span className="font-semibold">Pop‑up/Heads‑up</span> di pengaturan notifikasi aplikasi.
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={async () => {
