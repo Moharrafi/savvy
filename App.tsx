@@ -80,28 +80,48 @@ const App: React.FC = () => {
     setUnreadCount((prev) => prev + 1);
   };
 
-  useEffect(() => {
+  const refreshPushStatus = async () => {
+    if (!pushService.isSupported()) {
+      setPushStatus('unsupported');
+      return;
+    }
+    const subscription = await pushService.getSubscription().catch(() => null);
+    setPushStatus(subscription ? 'enabled' : 'disabled');
+  };
+
+  const ensureNotificationPermission = async (): Promise<boolean> => {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      setPushStatus('disabled');
+    }
+    return granted;
+  };
+
+  const handleEnablePush = async () => {
     if (!user) return;
     if (!pushService.isSupported()) {
       setPushStatus('unsupported');
       return;
     }
-    requestNotificationPermission()
-      .then(async (granted) => {
-        if (granted) {
-          const ok = await pushService.subscribe(user.id).catch((error) => {
-            console.error('Push subscribe error', error);
-            return false;
-          });
-          setPushStatus(ok ? 'enabled' : 'disabled');
-        } else {
-          setPushStatus('disabled');
-        }
-      })
-      .catch((error) => {
-        console.error('Notification permission error', error);
-        setPushStatus('disabled');
-      });
+    if (!pushService.isConfigured()) {
+      console.warn('VITE_VAPID_PUBLIC_KEY missing. Set it in Vercel.');
+      setPushStatus('disabled');
+      return;
+    }
+    const granted = await ensureNotificationPermission();
+    if (!granted) return;
+    const ok = await pushService.subscribe(user.id).catch((error) => {
+      console.error('Push subscribe error', error);
+      return false;
+    });
+    setPushStatus(ok ? 'enabled' : 'disabled');
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    refreshPushStatus().catch((error) => {
+      console.error('Push status error', error);
+    });
   }, [user]);
 
   useEffect(() => {
@@ -487,10 +507,12 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      const granted = await requestNotificationPermission();
+                      const granted = await ensureNotificationPermission();
                       if (!granted) {
                         setIsMuted(true);
                         localStorage.setItem('savvy_mute_notifications', 'true');
+                      } else {
+                        await refreshPushStatus();
                       }
                     }}
                     className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
@@ -503,19 +525,7 @@ const App: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (!user) return;
-                      if (!pushService.isConfigured()) {
-                        console.warn('VITE_VAPID_PUBLIC_KEY missing. Set it in Vercel.');
-                        setPushStatus('disabled');
-                        return;
-                      }
-                      const ok = await pushService.subscribe(user.id).catch((error) => {
-                        console.error('Push subscribe error', error);
-                        return false;
-                      });
-                      setPushStatus(ok ? 'enabled' : 'disabled');
-                    }}
+                    onClick={handleEnablePush}
                     className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
                       isDarkMode
                         ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -530,6 +540,9 @@ const App: React.FC = () => {
                       const next = !isMuted;
                       setIsMuted(next);
                       localStorage.setItem('savvy_mute_notifications', String(next));
+                      if (next) {
+                        setPushStatus('disabled');
+                      }
                     }}
                     className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
                       isDarkMode
