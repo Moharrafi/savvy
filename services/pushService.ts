@@ -22,13 +22,24 @@ const urlBase64ToUint8Array = (base64String: string) => {
 };
 
 export const pushService = {
-  subscribe: async (userId: string): Promise<void> => {
+  isSupported: (): boolean => {
+    return 'serviceWorker' in navigator && 'PushManager' in window;
+  },
+  isConfigured: (): boolean => {
+    return Boolean(VAPID_PUBLIC_KEY);
+  },
+  getSubscription: async (): Promise<PushSubscription | null> => {
+    if (!('serviceWorker' in navigator)) return null;
+    const registration = await navigator.serviceWorker.ready;
+    return registration.pushManager.getSubscription();
+  },
+  subscribe: async (userId: string): Promise<boolean> => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      return;
+      return false;
     }
     if (!VAPID_PUBLIC_KEY) {
       console.warn('VITE_VAPID_PUBLIC_KEY missing. Push subscription skipped.');
-      return;
+      return false;
     }
 
     const registration = await navigator.serviceWorker.ready;
@@ -47,5 +58,6 @@ export const pushService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, subscription: payload })
     });
+    return true;
   }
 };

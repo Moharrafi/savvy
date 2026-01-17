@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [enableAnimations, setEnableAnimations] = useState(true);
   const [enableSounds, setEnableSounds] = useState(true);
+  const [pushStatus, setPushStatus] = useState<'unknown' | 'enabled' | 'disabled' | 'unsupported'>('unknown');
   const seenIdsRef = useRef<Set<string>>(new Set());
   
   // Theme State
@@ -81,16 +82,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
+    if (!pushService.isSupported()) {
+      setPushStatus('unsupported');
+      return;
+    }
     requestNotificationPermission()
-      .then((granted) => {
+      .then(async (granted) => {
         if (granted) {
-          pushService.subscribe(user.id).catch((error) => {
+          const ok = await pushService.subscribe(user.id).catch((error) => {
             console.error('Push subscribe error', error);
+            return false;
           });
+          setPushStatus(ok ? 'enabled' : 'disabled');
+        } else {
+          setPushStatus('disabled');
         }
       })
       .catch((error) => {
         console.error('Notification permission error', error);
+        setPushStatus('disabled');
       });
   }, [user]);
 
@@ -456,6 +466,24 @@ const App: React.FC = () => {
               <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
                 <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Notifikasi</h3>
                 <div className="mt-4 space-y-3">
+                  <div className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold ${
+                    isDarkMode ? 'bg-slate-950/50 text-slate-300' : 'bg-slate-50 text-slate-600'
+                  }`}>
+                    <span>Status Push</span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      pushStatus === 'enabled'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : pushStatus === 'unsupported'
+                          ? 'bg-slate-900/40 text-slate-400'
+                          : 'bg-rose-500/20 text-rose-300'
+                    }`}>
+                      {pushStatus === 'enabled'
+                        ? 'Aktif'
+                        : pushStatus === 'unsupported'
+                          ? 'Tidak didukung'
+                          : 'Nonaktif'}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={async () => {
@@ -472,6 +500,29 @@ const App: React.FC = () => {
                     }`}
                   >
                     Minta Izin Notifikasi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!user) return;
+                      if (!pushService.isConfigured()) {
+                        console.warn('VITE_VAPID_PUBLIC_KEY missing. Set it in Vercel.');
+                        setPushStatus('disabled');
+                        return;
+                      }
+                      const ok = await pushService.subscribe(user.id).catch((error) => {
+                        console.error('Push subscribe error', error);
+                        return false;
+                      });
+                      setPushStatus(ok ? 'enabled' : 'disabled');
+                    }}
+                    className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
+                      isDarkMode
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Aktifkan Push
                   </button>
                   <button
                     type="button"
