@@ -17,7 +17,12 @@ self.addEventListener('push', (event) => {
       body,
       data,
       icon: '/icon-192.png',
-      badge: '/icon-192.png'
+      badge: '/icon-192.png',
+      tag: data?.type || 'savvy-transaction',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [80, 40, 80],
+      silent: false
     })
   );
 });
