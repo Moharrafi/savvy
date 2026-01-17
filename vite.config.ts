@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
       plugins: [
         react(),
         VitePWA({
+          strategies: 'injectManifest',
+          srcDir: '.',
+          filename: 'service-worker.ts',
           registerType: 'autoUpdate',
           manifest: {
             name: 'Savvy',

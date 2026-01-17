@@ -10,6 +10,7 @@ import { authService } from './services/authService';
 import { transactionService } from './services/transactionService';
 import { Plus, Minus, Bell, Home, History, User as UserIcon, LayoutGrid } from 'lucide-react';
 import { sendNotification, requestNotificationPermission } from './services/notificationService';
+import { pushService } from './services/pushService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -79,11 +80,18 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      requestNotificationPermission().catch((error) => {
+    if (!user) return;
+    requestNotificationPermission()
+      .then((granted) => {
+        if (granted) {
+          pushService.subscribe(user.id).catch((error) => {
+            console.error('Push subscribe error', error);
+          });
+        }
+      })
+      .catch((error) => {
         console.error('Notification permission error', error);
       });
-    }
   }, [user]);
 
   useEffect(() => {

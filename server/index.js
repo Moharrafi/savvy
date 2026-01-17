@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import http from 'http';
 import { WebSocketServer } from 'ws';
+import webpush from 'web-push';
 import { query } from './db.js';
 
 dotenv.config();
@@ -21,6 +22,50 @@ const broadcast = (payload) => {
       client.send(message);
     }
   });
+};
+
+const isPushEnabled = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+if (isPushEnabled) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@savvy.app',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('VAPID keys missing. Push notifications are disabled.');
+}
+
+const sendPushToAll = async (payload, excludeUserId = null) => {
+  if (!isPushEnabled) return;
+  try {
+    const [rows] = await query(
+      'SELECT id, user_id AS userId, endpoint, p256dh, auth FROM push_subscriptions'
+    );
+
+    await Promise.all(
+      rows.map(async (sub) => {
+        if (excludeUserId && sub.userId === excludeUserId) return;
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth }
+            },
+            JSON.stringify(payload)
+          );
+        } catch (error) {
+          const statusCode = error?.statusCode || error?.status;
+          if (statusCode === 404 || statusCode === 410) {
+            await query('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
+          } else {
+            console.error('Push send error', error);
+          }
+        }
+      })
+    );
+  } catch (error) {
+    console.error('Push dispatch error', error);
+  }
 };
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
@@ -79,6 +124,33 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Login error', error);
     return res.status(500).send('Gagal login');
+  }
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { userId, subscription } = req.body || {};
+  if (!userId || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+    return res.status(400).send('Data subscription tidak lengkap');
+  }
+
+  try {
+    const { endpoint, keys } = subscription;
+    const [existing] = await query('SELECT id FROM push_subscriptions WHERE endpoint = ? LIMIT 1', [endpoint]);
+    if (existing.length > 0) {
+      await query(
+        'UPDATE push_subscriptions SET user_id = ?, p256dh = ?, auth = ? WHERE endpoint = ?',
+        [userId, keys.p256dh, keys.auth, endpoint]
+      );
+    } else {
+      await query(
+        'INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)',
+        [userId, endpoint, keys.p256dh, keys.auth]
+      );
+    }
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Subscribe error', error);
+    return res.status(500).send('Gagal menyimpan subscription');
   }
 });
 
@@ -149,6 +221,14 @@ app.post('/api/transactions', async (req, res) => {
     };
 
     broadcast({ type: 'transaction', data: responsePayload });
+    sendPushToAll(
+      {
+        title: type === 'DEPOSIT' ? 'Tabungan Masuk' : 'Penarikan Dana',
+        body: `${contributorName} ${type === 'DEPOSIT' ? 'menabung' : 'menarik'} Rp ${Number(amount).toLocaleString('id-ID')}`,
+        data: { type, userId }
+      },
+      userId
+    );
 
     return res.json(responsePayload);
   } catch (error) {
