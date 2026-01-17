@@ -17,6 +17,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
   const [displayAmount, setDisplayAmount] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [note, setNote] = useState('');
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -29,8 +30,29 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
       // Focus delay for mobile keyboard animation smoothness
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 100);
+        inputRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 150);
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateHeight = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+
+    updateHeight();
+    window.visualViewport?.addEventListener('resize', updateHeight);
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateHeight);
+      window.removeEventListener('resize', updateHeight);
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -85,12 +107,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
       ></div>
 
       {/* Modal Sheet */}
-      <div className={`relative w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2rem] border-t shadow-2xl transform transition-all animate-in slide-in-from-bottom duration-300 ${modalBg}`}>
+      <div
+        className={`relative w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-[2.5rem] sm:rounded-[2rem] border-t shadow-2xl transform transition-all animate-in slide-in-from-bottom duration-300 ${modalBg}`}
+        style={viewportHeight ? { maxHeight: Math.max(320, viewportHeight - 24) } : undefined}
+      >
         
         {/* Handle Bar for Mobile feel */}
         <div className={`absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 rounded-full opacity-50 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
         
-        <div className="p-6 pt-10">
+        <div className="p-6 pt-10 pb-10">
           {/* Header Minimalist */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2">
