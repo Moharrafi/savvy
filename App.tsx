@@ -141,8 +141,18 @@ const App: React.FC = () => {
     if (!user) return;
 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    const wsBase = import.meta.env.VITE_WS_URL || apiBase.replace(/^http/, 'ws');
-    const socket = new WebSocket(wsBase);
+    let wsBase = import.meta.env.VITE_WS_URL || apiBase.replace(/^http/, 'ws');
+    if (window.location.protocol === 'https:' && wsBase.startsWith('ws://')) {
+      wsBase = wsBase.replace('ws://', 'wss://');
+    }
+
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(wsBase);
+    } catch (error) {
+      console.error('WebSocket init error', error);
+      return;
+    }
 
     socket.addEventListener('message', (event) => {
       try {
@@ -175,7 +185,7 @@ const App: React.FC = () => {
     });
 
     return () => {
-      socket.close();
+      socket?.close();
     };
   }, [user]);
 
