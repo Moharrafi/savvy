@@ -44,6 +44,9 @@ importers:
       web-push:
         specifier: ^3.6.7
         version: 3.6.7
+      workbox-precaching:
+        specifier: ^7.3.0
+        version: 7.4.0
       workbox-window:
         specifier: ^7.3.0
         version: 7.4.0

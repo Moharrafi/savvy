@@ -21,6 +21,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "recharts": "^3.6.0",
+    "workbox-precaching": "^7.3.0",
     "workbox-window": "^7.3.0",
     "web-push": "^3.6.7",
     "ws": "^8.18.1"
