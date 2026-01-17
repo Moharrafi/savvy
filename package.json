@@ -15,6 +15,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "flyctl": "^1.2.6",
     "lucide-react": "^0.562.0",
     "mysql2": "^3.11.5",
     "react": "^19.2.3",
@@ -31,7 +32,10 @@
     "vite-plugin-pwa": "^1.2.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "protobufjs"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs"
+    ]
   },
   "packageManager": "pnpm@10.28.0"
 }
