@@ -227,7 +227,7 @@ app.get('/api/transactions/all', async (_req, res) => {
 });
 
 app.post('/api/transactions', async (req, res) => {
-  const { userId, contributorName, amount, type, note } = req.body || {};
+  const { userId, contributorName, amount, type, note, date } = req.body || {};
 
   if (!userId || !contributorName || !amount || !type) {
     return res.status(400).send('Data transaksi tidak lengkap');
@@ -239,12 +239,15 @@ app.post('/api/transactions', async (req, res) => {
 
   try {
     const id = crypto.randomUUID();
-    const date = new Date();
+    const transactionDate = date ? new Date(date) : new Date();
+    if (Number.isNaN(transactionDate.getTime())) {
+      return res.status(400).send('Tanggal transaksi tidak valid');
+    }
 
     await query(
       `INSERT INTO transactions (id, user_id, contributor_name, amount, type, date, note)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, userId, contributorName, amount, type, date, note || null]
+      [id, userId, contributorName, amount, type, transactionDate, note || null]
     );
 
     const responsePayload = {
@@ -253,7 +256,7 @@ app.post('/api/transactions', async (req, res) => {
       contributorName,
       amount,
       type,
-      date: date.toISOString(),
+      date: transactionDate.toISOString(),
       note: note || ''
     };
 

@@ -9,7 +9,7 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { NotificationCenter, NotificationItem } from './components/NotificationCenter';
 import { authService } from './services/authService';
 import { transactionService } from './services/transactionService';
-import { Plus, Minus, Bell, Home, History, User as UserIcon, LayoutGrid } from 'lucide-react';
+import { Plus, Minus, Bell, Home, History, User as UserIcon, LayoutGrid, CheckCircle2, XCircle, X } from 'lucide-react';
 import { sendNotification, requestNotificationPermission } from './services/notificationService';
 import { pushService } from './services/pushService';
 
@@ -33,6 +33,15 @@ const App: React.FC = () => {
   const [pushStatus, setPushStatus] = useState<'unknown' | 'enabled' | 'disabled' | 'unsupported'>('unknown');
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const [toast, setToast] = useState<{
+    id: string;
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
+  const [toastOffsetY, setToastOffsetY] = useState(0);
+  const [isToastDragging, setIsToastDragging] = useState(false);
+  const toastStartYRef = useRef<number | null>(null);
   
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -149,6 +158,19 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    setToastOffsetY(0);
+    setIsToastDragging(false);
+    toastStartYRef.current = null;
+    const timeout = window.setTimeout(() => {
+      setToast(null);
+    }, 5000);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [toast]);
+
   // Load Transactions when User changes
   useEffect(() => {
     if (!user) {
@@ -247,7 +269,7 @@ const App: React.FC = () => {
   }, 0);
   const userNet = userDeposits - userWithdrawals;
 
-  const handleAddTransaction = async (name: string, amount: number, type: TransactionType, note: string) => {
+  const handleAddTransaction = async (name: string, amount: number, type: TransactionType, note: string, date: string) => {
     if (!user) return;
 
     try {
@@ -256,14 +278,21 @@ const App: React.FC = () => {
         contributorName: name,
         amount,
         type,
-        note
+        note,
+        date
       });
       if (!seenIdsRef.current.has(newTransaction.id)) {
         seenIdsRef.current.add(newTransaction.id);
         setTransactions((prev) => [newTransaction, ...prev]);
       }
+      const title = type === TransactionType.DEPOSIT ? 'Tabungan tersimpan' : 'Dana berhasil ditarik';
+      const message = `Rp ${amount.toLocaleString('id-ID')} pada ${new Date(date).toLocaleDateString('id-ID')}`;
+      setToast({ id: crypto.randomUUID(), type: 'success', title, message });
     } catch (error) {
       console.error('Failed to save transaction', error);
+      const fallback = 'Gagal menyimpan transaksi. Coba lagi.';
+      const message = error instanceof Error && error.message ? error.message : fallback;
+      setToast({ id: crypto.randomUUID(), type: 'error', title: 'Transaksi gagal', message });
     }
   };
 
@@ -278,6 +307,7 @@ const App: React.FC = () => {
     setShowProfileLogoutConfirm(false);
     setShowSettingsLogoutConfirm(false);
     setIsChangePasswordOpen(false);
+    setActiveTab('home');
   };
 
   const handleChangePassword = async (currentPassword: string, newPassword: string) => {
@@ -291,7 +321,10 @@ const App: React.FC = () => {
   };
 
   if (!user) {
-    return <AuthScreen onSuccess={setUser} />;
+    return <AuthScreen onSuccess={(nextUser) => {
+      setUser(nextUser);
+      setActiveTab('home');
+    }} />;
   }
 
   // Dynamic Styles based on Theme
@@ -397,7 +430,8 @@ const App: React.FC = () => {
                       }
                       return acc;
                     }, {});
-                    const rows = Object.values(summary).sort((a, b) => a.name.localeCompare(b.name));
+                    const rows: Array<{ name: string; in: number; out: number }> = Object.values(summary);
+                    rows.sort((a, b) => a.name.localeCompare(b.name));
                     if (rows.length === 0) {
                       return (
                         <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
@@ -851,6 +885,69 @@ const App: React.FC = () => {
           onSubmit={handleChangePassword}
           isDarkMode={isDarkMode}
         />
+
+        {toast && (
+          <div className="fixed top-4 left-0 right-0 z-40 flex justify-center px-4">
+            <div
+              className={`w-full max-w-sm rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur animate-in slide-in-from-top-6 fade-in duration-500 ${
+                isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
+              }`}
+              style={{
+                transform: `translateY(${toastOffsetY}px)`,
+                opacity: isToastDragging ? 0.9 : 1,
+                transition: isToastDragging
+                  ? 'none'
+                  : 'transform 400ms cubic-bezier(0.22, 1, 0.36, 1), opacity 400ms ease'
+              }}
+              onTouchStart={(event) => {
+                toastStartYRef.current = event.touches[0]?.clientY ?? null;
+                setIsToastDragging(true);
+              }}
+              onTouchMove={(event) => {
+                const startY = toastStartYRef.current;
+                if (startY === null) return;
+                const currentY = event.touches[0]?.clientY ?? startY;
+                const delta = currentY - startY;
+                setToastOffsetY(delta);
+              }}
+              onTouchEnd={() => {
+                const threshold = 50;
+                if (Math.abs(toastOffsetY) > threshold) {
+                  setToast(null);
+                } else {
+                  setToastOffsetY(0);
+                }
+                setIsToastDragging(false);
+                toastStartYRef.current = null;
+              }}
+              onTouchCancel={() => {
+                setToastOffsetY(0);
+                setIsToastDragging(false);
+                toastStartYRef.current = null;
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${
+                    toast.type === 'success'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-rose-500/15 text-rose-400'
+                  }`}
+                >
+                  {toast.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    {toast.title}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {toast.message}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

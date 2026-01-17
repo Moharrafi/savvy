@@ -8,6 +8,7 @@ type CreateTransactionInput = {
   amount: number;
   type: TransactionType;
   note?: string;
+  date?: string;
 };
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {

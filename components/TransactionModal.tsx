@@ -5,7 +5,7 @@ import { X, Check, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string, amount: number, type: TransactionType, note: string) => void;
+  onSubmit: (name: string, amount: number, type: TransactionType, note: string, date: string) => void;
   type: TransactionType;
   isDarkMode: boolean;
   defaultName?: string;
@@ -18,8 +18,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
   const [displayAmount, setDisplayAmount] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [note, setNote] = useState('');
+  const [date, setDate] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const getTodayInput = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -28,6 +39,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
       setDisplayAmount('');
       setAmount(0);
       setNote('');
+      setDate(getTodayInput());
+      setShowConfirm(false);
       // Focus delay for mobile keyboard animation smoothness
       setTimeout(() => {
         inputRef.current?.focus();
@@ -40,9 +53,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
     if (!isOpen) return;
     const updateHeight = () => {
       if (window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
+        const vv = window.visualViewport;
+        setViewportHeight(vv.height);
+        const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        setKeyboardOffset(offset);
       } else {
         setViewportHeight(window.innerHeight);
+        setKeyboardOffset(0);
       }
     };
 
@@ -78,8 +95,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || amount <= 0) return;
-    onSubmit(name, amount, type, note);
+    if (!name || amount <= 0 || !date) return;
+    setShowConfirm(true);
+  };
+
+  const handleConfirmSubmit = () => {
+    const [year, month, day] = date.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    onSubmit(name, amount, type, note, selectedDate.toISOString());
     onClose();
   };
 
@@ -98,9 +121,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
   const presetClass = isDarkMode 
     ? 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-white' 
     : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 bg-white';
+  const confirmBg = isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
+  const confirmText = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+  const confirmSub = isDarkMode ? 'text-slate-400' : 'text-slate-500';
+  const confirmAccent = isDeposit ? (isDarkMode ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-emerald-600 hover:bg-emerald-500')
+    : (isDarkMode ? 'bg-rose-600 hover:bg-rose-500' : 'bg-rose-600 hover:bg-rose-500');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      style={keyboardOffset > 0 ? { paddingBottom: keyboardOffset } : undefined}
+    >
       {/* Lightweight Backdrop */}
       <div 
         className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px] transition-opacity duration-300"
@@ -185,6 +216,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
                 required
               />
               <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={`w-full bg-transparent px-4 py-3.5 focus:outline-none border-b ${textMain} ${placeholderColor} ${isDarkMode ? 'border-slate-700/50' : 'border-slate-200'} ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-500'
+                }`}
+                required
+              />
+              <input
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -204,6 +244,69 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
           </form>
         </div>
       </div>
+      {showConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowConfirm(false)}
+          ></div>
+          <div className={`relative w-full max-w-sm rounded-2xl border p-6 shadow-2xl ${confirmBg}`}>
+            <div className="flex items-center gap-2">
+              <span className={`p-2 rounded-full ${iconBg} ${accentColor}`}>
+                {isDeposit ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+              </span>
+              <div>
+                <h3 className={`text-base font-semibold ${confirmText}`}>Konfirmasi Transaksi</h3>
+                <p className={`text-xs ${confirmSub}`}>
+                  {isDeposit ? 'Simpan tabungan ini?' : 'Tarik dana ini?'}
+                </p>
+              </div>
+            </div>
+            <div className={`mt-4 rounded-xl border p-4 ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${confirmSub}`}>Nama</span>
+                <span className={`text-sm font-semibold ${confirmText}`}>{name}</span>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${confirmSub}`}>Tanggal</span>
+                <span className={`text-sm ${confirmText}`}>
+                  {new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${confirmSub}`}>Nominal</span>
+                <span className={`text-sm font-semibold ${accentColor}`}>
+                  {isDeposit ? '+' : '-'} Rp {amount.toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="mt-3">
+                <span className={`text-xs ${confirmSub}`}>Catatan</span>
+                <p className={`text-sm mt-1 ${confirmText}`}>{note ? note : '-'}</p>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
+                  isDarkMode
+                    ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSubmit}
+                className={`flex-1 py-3 rounded-xl text-sm font-semibold text-white transition-all ${confirmAccent}`}
+              >
+                {isDeposit ? 'Ya, Simpan' : 'Ya, Tarik'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
