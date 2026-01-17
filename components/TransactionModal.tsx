@@ -8,11 +8,12 @@ interface TransactionModalProps {
   onSubmit: (name: string, amount: number, type: TransactionType, note: string) => void;
   type: TransactionType;
   isDarkMode: boolean;
+  defaultName?: string;
 }
 
 const PRESET_AMOUNTS = [10000, 20000, 50000, 100000];
 
-export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSubmit, type, isDarkMode }) => {
+export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSubmit, type, isDarkMode, defaultName }) => {
   const [name, setName] = useState('');
   const [displayAmount, setDisplayAmount] = useState('');
   const [amount, setAmount] = useState<number>(0);
@@ -23,7 +24,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
   useEffect(() => {
     if (isOpen) {
       // Reset state
-      setName('');
+      setName(defaultName || '');
       setDisplayAmount('');
       setAmount(0);
       setNote('');
@@ -177,7 +178,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Nama (Wajib)"
-                className={`w-full bg-transparent px-4 py-3.5 focus:outline-none border-b ${textMain} ${placeholderColor} ${isDarkMode ? 'border-slate-700/50' : 'border-slate-200'}`}
+                className={`w-full bg-transparent px-4 py-3.5 focus:outline-none border-b ${textMain} ${placeholderColor} ${isDarkMode ? 'border-slate-700/50' : 'border-slate-200'} ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-500'
+                }`}
+                readOnly
                 required
               />
               <input

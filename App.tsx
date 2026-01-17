@@ -828,6 +828,7 @@ const App: React.FC = () => {
           onSubmit={handleAddTransaction}
           type={modalType}
           isDarkMode={isDarkMode}
+          defaultName={user.name}
         />
 
         <SettingsModal
