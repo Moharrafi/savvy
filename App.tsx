@@ -382,7 +382,7 @@ const App: React.FC = () => {
                     <h3 className={`text-lg font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Rekap Per User</h3>
                     <span className="text-xs text-slate-500">Masuk & Keluar</span>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                   {(() => {
                     const summary = transactions.reduce<Record<string, { name: string; in: number; out: number }>>((acc, t) => {
                       const rawName = (t.contributorName || 'Tanpa Nama').trim();
@@ -408,7 +408,7 @@ const App: React.FC = () => {
                     return rows.map((row) => (
                       <div
                         key={row.name}
-                        className={`backdrop-blur-sm border rounded-2xl px-4 py-2.5 flex items-center justify-between transition-all active:scale-[0.99] ${
+                        className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center justify-between transition-all active:scale-[0.99] ${
                           isDarkMode ? 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200'
                         }`}
                       >
