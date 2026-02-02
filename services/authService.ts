@@ -1,7 +1,8 @@
 import { User } from '../types';
 
 const SESSION_KEY = 'savvy_current_session';
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const envUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
+const API_BASE = envUrl.endsWith('/') ? envUrl.slice(0, envUrl.length - 1) : envUrl;
 console.log('Current API_BASE:', API_BASE);
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
