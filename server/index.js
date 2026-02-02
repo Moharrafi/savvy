@@ -261,7 +261,7 @@ app.post('/api/transactions', async (req, res) => {
     };
 
     broadcast({ type: 'transaction', data: responsePayload });
-    sendPushToAll(
+    await sendPushToAll(
       {
         title: type === 'DEPOSIT' ? 'Tabungan Masuk' : 'Penarikan Dana',
         body: `${contributorName} ${type === 'DEPOSIT' ? 'menabung' : 'menarik'} Rp ${Number(amount).toLocaleString('id-ID')}`,
@@ -277,6 +277,10 @@ app.post('/api/transactions', async (req, res) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`API server running on http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  server.listen(port, () => {
+    console.log(`API server running on http://localhost:${port}`);
+  });
+}
+
+export default app;
