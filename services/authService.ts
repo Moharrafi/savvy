@@ -2,6 +2,7 @@ import { User } from '../types';
 
 const SESSION_KEY = 'savvy_current_session';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+console.log('Current API_BASE:', API_BASE);
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const response = await fetch(`${API_BASE}${path}`, {
