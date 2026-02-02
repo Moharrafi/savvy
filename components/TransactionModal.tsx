@@ -140,7 +140,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
 
       {/* Modal Sheet */}
       <div
-        className={`relative w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-[2.5rem] sm:rounded-[2rem] border-t shadow-2xl transform transition-all animate-in slide-in-from-bottom duration-300 ${modalBg}`}
+        className={`relative w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-[2.5rem] sm:rounded-[2rem] border-t shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 ease-out ${modalBg}`}
         style={viewportHeight ? { maxHeight: Math.max(320, viewportHeight - 24) } : undefined}
       >
         
