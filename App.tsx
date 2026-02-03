@@ -42,10 +42,10 @@ const App: React.FC = () => {
   const [toastOffsetY, setToastOffsetY] = useState(0);
   const [isToastDragging, setIsToastDragging] = useState(false);
   const toastStartYRef = useRef<number | null>(null);
-  
+
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(true);
-  
+
 
   // Initialize Session & Theme
   useEffect(() => {
@@ -199,57 +199,46 @@ const App: React.FC = () => {
     };
   }, [user]);
 
+  // Polling for transaction updates (since WebSocket doesn't work in Vercel serverless)
   useEffect(() => {
     if (!user) return;
 
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    let wsBase = import.meta.env.VITE_WS_URL || apiBase.replace(/^http/, 'ws');
-    if (window.location.protocol === 'https:' && wsBase.startsWith('ws://')) {
-      wsBase = wsBase.replace('ws://', 'wss://');
-    }
-
-    let socket: WebSocket | null = null;
-    try {
-      socket = new WebSocket(wsBase);
-    } catch (error) {
-      console.error('WebSocket init error', error);
-      return;
-    }
-
-    socket.addEventListener('message', (event) => {
+    // Poll for new transactions every 10 seconds
+    const pollInterval = setInterval(async () => {
       try {
-        const message = JSON.parse(event.data);
-        if (message?.type !== 'transaction') return;
+        const items = await transactionService.listGlobal();
+        const newTransactions = items.filter(t => !seenIdsRef.current.has(t.id));
 
-        const incoming: Transaction = message.data;
-        if (!incoming?.id) return;
-        if (seenIdsRef.current.has(incoming.id)) return;
+        if (newTransactions.length > 0) {
+          // Add new transactions to state
+          newTransactions.forEach(incoming => {
+            seenIdsRef.current.add(incoming.id);
 
-        seenIdsRef.current.add(incoming.id);
-        setTransactions((prev) => [incoming, ...prev]);
+            // Show notification for transactions from other users
+            if (incoming.userId && incoming.userId !== user.id) {
+              const title = incoming.type === TransactionType.DEPOSIT ? 'Tabungan Masuk' : 'Penarikan Dana';
+              const amountText = incoming.amount.toLocaleString('id-ID');
+              const actor = incoming.contributorName || 'Seseorang';
+              const body = incoming.type === TransactionType.DEPOSIT
+                ? `${actor} menabung Rp ${amountText}`
+                : `${actor} menarik Rp ${amountText}`;
+              pushNotification(title, body);
+            }
+          });
 
-        if (incoming.userId && incoming.userId === user.id) return;
-
-        const title = incoming.type === TransactionType.DEPOSIT ? 'Tabungan Masuk' : 'Penarikan Dana';
-        const amountText = incoming.amount.toLocaleString('id-ID');
-        const actor = incoming.contributorName || 'Seseorang';
-        const body = incoming.type === TransactionType.DEPOSIT
-          ? `${actor} menabung Rp ${amountText}`
-          : `${actor} menarik Rp ${amountText}`;
-        pushNotification(title, body);
+          // Update transactions list
+          setTransactions(items);
+        }
       } catch (error) {
-        console.error('WS message error', error);
+        console.error('Polling error', error);
       }
-    });
-
-    socket.addEventListener('error', (error) => {
-      console.error('WebSocket error', error);
-    });
+    }, 10000); // Poll every 10 seconds
 
     return () => {
-      socket?.close();
+      clearInterval(pollInterval);
     };
   }, [user]);
+
 
   const totalBalance = transactions.reduce((acc, t) => {
     return t.type === TransactionType.DEPOSIT ? acc + t.amount : acc - t.amount;
@@ -332,17 +321,17 @@ const App: React.FC = () => {
   const textClass = isDarkMode ? 'text-slate-100' : 'text-slate-900';
   const containerClass = isDarkMode ? 'bg-slate-950' : 'bg-slate-50';
   const headerBg = isDarkMode ? 'bg-slate-950' : 'bg-slate-50/90 backdrop-blur-md';
-  const iconBtnClass = isDarkMode 
-    ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400' 
+  const iconBtnClass = isDarkMode
+    ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400'
     : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600 shadow-sm';
-  const bottomGradient = isDarkMode 
-    ? 'from-slate-950 via-slate-950' 
+  const bottomGradient = isDarkMode
+    ? 'from-slate-950 via-slate-950'
     : 'from-slate-50 via-slate-50';
 
   return (
     <div className={`min-h-screen flex justify-center overflow-hidden transition-colors duration-300 ${bgClass} ${textClass}`}>
       <div className={`w-full max-w-md min-h-screen shadow-2xl relative overflow-y-auto transition-colors duration-300 ${containerClass}`}>
-        
+
         {/* Header */}
         <header className={`p-6 pb-2 pt-8 flex justify-between items-center sticky top-0 z-20 transition-colors duration-300 ${headerBg}`}>
           <div>
@@ -373,423 +362,406 @@ const App: React.FC = () => {
             key={activeTab}
             className={enableAnimations ? 'animate-in fade-in duration-500 ease-out' : ''}
           >
-          {activeTab === 'home' && (
-            <div className="space-y-6">
-              <BalanceCard transactions={transactions} totalBalance={totalBalance} />
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => openModal(TransactionType.WITHDRAWAL)}
-                  className={`flex-1 font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${
-                    isDarkMode 
-                    ? 'bg-slate-900 text-rose-300 border-slate-800 hover:bg-slate-800' 
-                    : 'bg-white text-rose-600 border-slate-200 hover:bg-rose-50'
-                  }`}
-                >
-                  <Minus size={16} />
-                  Tarik
-                </button>
-                <button 
-                  onClick={() => openModal(TransactionType.DEPOSIT)}
-                  className={`flex-[2] font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${
-                    isDarkMode
-                    ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500'
-                    : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
-                  }`}
-                >
-                  <Plus size={16} />
-                  Nabung
-                </button>
-              </div>
-              <div className="space-y-7">
-                <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                  <TransactionHistory
-                    transactions={transactions.slice(0, 5)}
-                    isDarkMode={isDarkMode}
-                    title="Aktivitas Terkini"
-                    showControls={false}
-                    bottomPadding={false}
-                  />
-                </div>
-                <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className={`text-lg font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Rekap Per User</h3>
-                    <span className="text-xs text-slate-500">Masuk & Keluar</span>
-                  </div>
-                  <div className="space-y-3">
-                  {(() => {
-                    const summary = transactions.reduce<Record<string, { name: string; in: number; out: number }>>((acc, t) => {
-                      const rawName = (t.contributorName || 'Tanpa Nama').trim();
-                      const key = rawName.toLowerCase();
-                      if (!acc[key]) {
-                        acc[key] = { name: rawName || 'Tanpa Nama', in: 0, out: 0 };
-                      }
-                      if (t.type === TransactionType.DEPOSIT) {
-                        acc[key].in += t.amount;
-                      } else {
-                        acc[key].out += t.amount;
-                      }
-                      return acc;
-                    }, {});
-                    const rows: Array<{ name: string; in: number; out: number }> = Object.values(summary);
-                    rows.sort((a, b) => a.name.localeCompare(b.name));
-                    if (rows.length === 0) {
-                      return (
-                        <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                          Belum ada transaksi.
-                        </p>
-                      );
-                    }
-                    return rows.map((row) => (
-                      <div
-                        key={row.name}
-                        className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center justify-between transition-all active:scale-[0.99] ${
-                          isDarkMode ? 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className={`font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
-                            {row.name}
-                          </p>
-                          <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                            Total masuk & keluar
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-bold text-sm sm:text-base text-emerald-500">+ Rp {row.in.toLocaleString('id-ID')}</p>
-                          <p className="font-bold text-sm sm:text-base text-rose-500">- Rp {row.out.toLocaleString('id-ID')}</p>
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {activeTab === 'history' && (
-            <div className="space-y-4">
-              <h2 className={`text-sm font-semibold mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                Riwayat Transaksi
-              </h2>
-              <TransactionHistory transactions={transactions} isDarkMode={isDarkMode} />
-            </div>
-          )}
-          {activeTab === 'profile' && (
-            <div className="space-y-5">
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <p className={`text-xs uppercase tracking-[0.2em] ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Profil</p>
-                <h2 className={`text-2xl font-bold mt-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{user.name}</h2>
-                <p className={`text-sm mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>@{user.username}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Saldo</p>
-                  <p className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    Rp {totalBalance.toLocaleString('id-ID')}
-                  </p>
-                </div>
-                <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Total Transaksi</p>
-                  <p className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    {transactions.length}
-                  </p>
-                </div>
-                <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Pemasukan</p>
-                  <p className={`text-lg font-semibold text-emerald-400`}>
-                    Rp {totalDeposits.toLocaleString('id-ID')}
-                  </p>
-                </div>
-                <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Pengeluaran</p>
-                  <p className={`text-lg font-semibold text-rose-400`}>
-                    Rp {totalWithdrawals.toLocaleString('id-ID')}
-                  </p>
-                </div>
-              </div>
-
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Kontribusi Saya</h3>
-                <div className="mt-4 grid grid-cols-3 gap-3">
-                  <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                    <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Masuk</p>
-                    <p className="text-sm font-semibold text-emerald-400">
-                      Rp {userDeposits.toLocaleString('id-ID')}
-                    </p>
-                  </div>
-                  <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                    <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Keluar</p>
-                    <p className="text-sm font-semibold text-rose-400">
-                      Rp {userWithdrawals.toLocaleString('id-ID')}
-                    </p>
-                  </div>
-                  <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                    <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Net</p>
-                    <p className={`text-sm font-semibold ${userNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      Rp {Math.abs(userNet).toLocaleString('id-ID')}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-          {activeTab === 'settings' && (
-            <div className={enableAnimations ? 'space-y-5 animate-in fade-in duration-500 ease-out' : 'space-y-5'}>
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pengaturan</h2>
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Kelola tema, notifikasi, keamanan, dan preferensi aplikasi.
-                </p>
-              </div>
-
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Tampilan</h3>
-                <div className="mt-4 space-y-3">
+            {activeTab === 'home' && (
+              <div className="space-y-6">
+                <BalanceCard transactions={transactions} totalBalance={totalBalance} />
+                <div className="flex gap-3">
                   <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
+                    onClick={() => openModal(TransactionType.WITHDRAWAL)}
+                    className={`flex-1 font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${isDarkMode
+                        ? 'bg-slate-900 text-rose-300 border-slate-800 hover:bg-slate-800'
+                        : 'bg-white text-rose-600 border-slate-200 hover:bg-rose-50'
+                      }`}
                   >
-                    <span>{isDarkMode ? 'Mode Terang' : 'Mode Gelap'}</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${isDarkMode ? 'bg-slate-900 text-slate-400' : 'bg-white text-slate-500'}`}>
-                      {isDarkMode ? 'Dark' : 'Light'}
-                    </span>
+                    <Minus size={16} />
+                    Tarik
                   </button>
                   <button
-                    type="button"
-                    onClick={() => {
-                      const next = !enableAnimations;
-                      setEnableAnimations(next);
-                      localStorage.setItem('savvy_enable_animations', String(next));
-                    }}
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
+                    onClick={() => openModal(TransactionType.DEPOSIT)}
+                    className={`flex-[2] font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${isDarkMode
+                        ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500'
+                        : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
+                      }`}
                   >
-                    <span>Animasi</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${enableAnimations ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900/40 text-slate-400'}`}>
-                      {enableAnimations ? 'On' : 'Off'}
-                    </span>
+                    <Plus size={16} />
+                    Nabung
                   </button>
                 </div>
-              </div>
-
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Notifikasi</h3>
-                <div className="mt-4 space-y-3">
-                  <div className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold ${
-                    isDarkMode ? 'bg-slate-950/50 text-slate-300' : 'bg-slate-50 text-slate-600'
-                  }`}>
-                    <span>Status Push</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      pushStatus === 'enabled'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : pushStatus === 'unsupported'
-                          ? 'bg-slate-900/40 text-slate-400'
-                          : 'bg-rose-500/20 text-rose-300'
-                    }`}>
-                      {pushStatus === 'enabled'
-                        ? 'Aktif'
-                        : pushStatus === 'unsupported'
-                          ? 'Tidak didukung'
-                          : 'Nonaktif'}
-                    </span>
+                <div className="space-y-7">
+                  <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <TransactionHistory
+                      transactions={transactions.slice(0, 5)}
+                      isDarkMode={isDarkMode}
+                      title="Aktivitas Terkini"
+                      showControls={false}
+                      bottomPadding={false}
+                    />
                   </div>
-                  {pushStatus === 'enabled' && (
-                    <div className={`w-full rounded-2xl px-4 py-3 text-xs leading-relaxed ${
-                      isDarkMode ? 'bg-indigo-500/10 text-indigo-200 border border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                    }`}>
-                      Agar notifikasi muncul melayang di atas layar, aktifkan izin <span className="font-semibold">Pop‑up/Heads‑up</span> di pengaturan notifikasi aplikasi.
+                  <div className={`rounded-3xl border p-4 ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className={`text-lg font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Rekap Per User</h3>
+                      <span className="text-xs text-slate-500">Masuk & Keluar</span>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const granted = await ensureNotificationPermission();
-                      if (!granted) {
-                        setIsMuted(true);
-                        localStorage.setItem('savvy_mute_notifications', 'true');
-                      } else {
-                        await refreshPushStatus();
-                      }
-                    }}
-                    className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    Minta Izin Notifikasi
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEnablePush}
-                    className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    Aktifkan Push
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !isMuted;
-                      setIsMuted(next);
-                      localStorage.setItem('savvy_mute_notifications', String(next));
-                      if (next) {
-                        setPushStatus('disabled');
-                      }
-                    }}
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>Mute Notifikasi</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${isMuted ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
-                      {isMuted ? 'On' : 'Off'}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsNotificationsOpen(true)}
-                    className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    Lihat Riwayat Notifikasi
-                  </button>
+                    <div className="space-y-3">
+                      {(() => {
+                        const summary = transactions.reduce<Record<string, { name: string; in: number; out: number }>>((acc, t) => {
+                          const rawName = (t.contributorName || 'Tanpa Nama').trim();
+                          const key = rawName.toLowerCase();
+                          if (!acc[key]) {
+                            acc[key] = { name: rawName || 'Tanpa Nama', in: 0, out: 0 };
+                          }
+                          if (t.type === TransactionType.DEPOSIT) {
+                            acc[key].in += t.amount;
+                          } else {
+                            acc[key].out += t.amount;
+                          }
+                          return acc;
+                        }, {});
+                        const rows: Array<{ name: string; in: number; out: number }> = Object.values(summary);
+                        rows.sort((a, b) => a.name.localeCompare(b.name));
+                        if (rows.length === 0) {
+                          return (
+                            <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                              Belum ada transaksi.
+                            </p>
+                          );
+                        }
+                        return rows.map((row) => (
+                          <div
+                            key={row.name}
+                            className={`backdrop-blur-sm border rounded-2xl p-4 flex items-center justify-between transition-all active:scale-[0.99] ${isDarkMode ? 'bg-slate-800/50 border-slate-700/50 hover:bg-slate-800' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200'
+                              }`}
+                          >
+                            <div className="min-w-0">
+                              <p className={`font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                                {row.name}
+                              </p>
+                              <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                                Total masuk & keluar
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="font-bold text-sm sm:text-base text-emerald-500">+ Rp {row.in.toLocaleString('id-ID')}</p>
+                              <p className="font-bold text-sm sm:text-base text-rose-500">- Rp {row.out.toLocaleString('id-ID')}</p>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Keamanan</h3>
-                <div className="mt-4 space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsChangePasswordOpen(true)}
-                    className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    Ganti Password
-                  </button>
-                </div>
+            )}
+            {activeTab === 'history' && (
+              <div className="space-y-4">
+                <h2 className={`text-sm font-semibold mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Riwayat Transaksi
+                </h2>
+                <TransactionHistory transactions={transactions} isDarkMode={isDarkMode} />
               </div>
-
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Suara</h3>
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !enableSounds;
-                      setEnableSounds(next);
-                      localStorage.setItem('savvy_enable_sounds', String(next));
-                    }}
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>Suara Notifikasi</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${enableSounds ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900/40 text-slate-400'}`}>
-                      {enableSounds ? 'On' : 'Off'}
-                    </span>
-                  </button>
+            )}
+            {activeTab === 'profile' && (
+              <div className="space-y-5">
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <p className={`text-xs uppercase tracking-[0.2em] ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Profil</p>
+                  <h2 className={`text-2xl font-bold mt-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{user.name}</h2>
+                  <p className={`text-sm mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>@{user.username}</p>
                 </div>
-              </div>
 
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Bahasa</h3>
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>Bahasa Indonesia</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${isDarkMode ? 'bg-slate-900 text-slate-400' : 'bg-white text-slate-500'}`}>
-                      ID
-                    </span>
-                  </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                    <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Saldo</p>
+                    <p className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      Rp {totalBalance.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                    <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Total Transaksi</p>
+                    <p className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {transactions.length}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                    <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Pemasukan</p>
+                    <p className={`text-lg font-semibold text-emerald-400`}>
+                      Rp {totalDeposits.toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                    <p className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Pengeluaran</p>
+                    <p className={`text-lg font-semibold text-rose-400`}>
+                      Rp {totalWithdrawals.toLocaleString('id-ID')}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Tentang Aplikasi</h3>
-                <div className="mt-4 text-xs text-slate-500 space-y-2">
-                  <p>Versi: 1.0.0</p>
-                  <p>Build: Savvy Tabungan Premium</p>
-                  <p>© 2026 Savvy</p>
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Kontribusi Saya</h3>
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+                    <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                      <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Masuk</p>
+                      <p className="text-sm font-semibold text-emerald-400">
+                        Rp {userDeposits.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                    <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                      <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Keluar</p>
+                      <p className="text-sm font-semibold text-rose-400">
+                        Rp {userWithdrawals.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                    <div className={`rounded-2xl p-3 border text-center ${isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                      <p className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>Net</p>
+                      <p className={`text-sm font-semibold ${userNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        Rp {Math.abs(userNet).toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Keluar</h3>
-                <div className="mt-4 space-y-3">
-                  {!showSettingsLogoutConfirm ? (
+              </div>
+            )}
+            {activeTab === 'settings' && (
+              <div className={enableAnimations ? 'space-y-5 animate-in fade-in duration-500 ease-out' : 'space-y-5'}>
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Pengaturan</h2>
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Kelola tema, notifikasi, keamanan, dan preferensi aplikasi.
+                  </p>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Tampilan</h3>
+                  <div className="mt-4 space-y-3">
                     <button
                       type="button"
-                      onClick={() => setShowSettingsLogoutConfirm(true)}
-                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${
-                        isDarkMode
-                          ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
-                          : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                      }`}
+                      onClick={toggleTheme}
+                      className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
                     >
-                      Keluar dari Akun
+                      <span>{isDarkMode ? 'Mode Terang' : 'Mode Gelap'}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${isDarkMode ? 'bg-slate-900 text-slate-400' : 'bg-white text-slate-500'}`}>
+                        {isDarkMode ? 'Dark' : 'Light'}
+                      </span>
                     </button>
-                  ) : (
-                    <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-rose-500/30 bg-rose-500/10' : 'border-rose-200 bg-rose-50'}`}>
-                      <p className={`text-xs mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Yakin ingin keluar dari akun ini?
-                      </p>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowSettingsLogoutConfirm(false)}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold ${
-                            isDarkMode
-                              ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                              : 'bg-white text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          Batal
-                        </button>
-                        <button
-                          type="button"
-                          onClick={confirmLogout}
-                          className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600"
-                        >
-                          Ya, Keluar
-                        </button>
-                      </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !enableAnimations;
+                        setEnableAnimations(next);
+                        localStorage.setItem('savvy_enable_animations', String(next));
+                      }}
+                      className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      <span>Animasi</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${enableAnimations ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900/40 text-slate-400'}`}>
+                        {enableAnimations ? 'On' : 'Off'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Notifikasi</h3>
+                  <div className="mt-4 space-y-3">
+                    <div className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold ${isDarkMode ? 'bg-slate-950/50 text-slate-300' : 'bg-slate-50 text-slate-600'
+                      }`}>
+                      <span>Status Push</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${pushStatus === 'enabled'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : pushStatus === 'unsupported'
+                            ? 'bg-slate-900/40 text-slate-400'
+                            : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                        {pushStatus === 'enabled'
+                          ? 'Aktif'
+                          : pushStatus === 'unsupported'
+                            ? 'Tidak didukung'
+                            : 'Nonaktif'}
+                      </span>
                     </div>
-                  )}
+                    {pushStatus === 'enabled' && (
+                      <div className={`w-full rounded-2xl px-4 py-3 text-xs leading-relaxed ${isDarkMode ? 'bg-indigo-500/10 text-indigo-200 border border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                        }`}>
+                        Agar notifikasi muncul melayang di atas layar, aktifkan izin <span className="font-semibold">Pop‑up/Heads‑up</span> di pengaturan notifikasi aplikasi.
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const granted = await ensureNotificationPermission();
+                        if (!granted) {
+                          setIsMuted(true);
+                          localStorage.setItem('savvy_mute_notifications', 'true');
+                        } else {
+                          await refreshPushStatus();
+                        }
+                      }}
+                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      Minta Izin Notifikasi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEnablePush}
+                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      Aktifkan Push
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isMuted;
+                        setIsMuted(next);
+                        localStorage.setItem('savvy_mute_notifications', String(next));
+                        if (next) {
+                          setPushStatus('disabled');
+                        }
+                      }}
+                      className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      <span>Mute Notifikasi</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${isMuted ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                        {isMuted ? 'On' : 'Off'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsNotificationsOpen(true)}
+                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      Lihat Riwayat Notifikasi
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Keamanan</h3>
+                  <div className="mt-4 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsChangePasswordOpen(true)}
+                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      Ganti Password
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Suara</h3>
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !enableSounds;
+                        setEnableSounds(next);
+                        localStorage.setItem('savvy_enable_sounds', String(next));
+                      }}
+                      className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      <span>Suara Notifikasi</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${enableSounds ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900/40 text-slate-400'}`}>
+                        {enableSounds ? 'On' : 'Off'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Bahasa</h3>
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
+                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      <span>Bahasa Indonesia</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${isDarkMode ? 'bg-slate-900 text-slate-400' : 'bg-white text-slate-500'}`}>
+                        ID
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Tentang Aplikasi</h3>
+                  <div className="mt-4 text-xs text-slate-500 space-y-2">
+                    <p>Versi: 1.0.0</p>
+                    <p>Build: Savvy Tabungan Premium</p>
+                    <p>© 2026 Savvy</p>
+                  </div>
+                </div>
+
+                <div className={`rounded-3xl p-6 border ${isDarkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <h3 className={`text-sm font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Keluar</h3>
+                  <div className="mt-4 space-y-3">
+                    {!showSettingsLogoutConfirm ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowSettingsLogoutConfirm(true)}
+                        className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
+                            ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                            : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                          }`}
+                      >
+                        Keluar dari Akun
+                      </button>
+                    ) : (
+                      <div className={`rounded-2xl p-4 border ${isDarkMode ? 'border-rose-500/30 bg-rose-500/10' : 'border-rose-200 bg-rose-50'}`}>
+                        <p className={`text-xs mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                          Yakin ingin keluar dari akun ini?
+                        </p>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setShowSettingsLogoutConfirm(false)}
+                            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold ${isDarkMode
+                                ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                : 'bg-white text-slate-600 hover:bg-slate-100'
+                              }`}
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={confirmLogout}
+                            className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600"
+                          >
+                            Ya, Keluar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
           </div>
         </main>
 
@@ -798,13 +770,11 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between px-6 py-3">
             <button
               onClick={() => handleTabClick('home')}
-              className={`flex flex-col items-center gap-1 text-[11px] font-semibold ${
-                enableAnimations
+              className={`flex flex-col items-center gap-1 text-[11px] font-semibold ${enableAnimations
                   ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
                   : ''
-              } ${
-                activeTab === 'home' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-              } ${enableAnimations && tappedTab === 'home' ? 'scale-110' : ''}`}
+                } ${activeTab === 'home' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                } ${enableAnimations && tappedTab === 'home' ? 'scale-110' : ''}`}
             >
               <Home size={18} />
               Utama
@@ -812,13 +782,11 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => handleTabClick('history')}
-              className={`flex flex-col items-center gap-1 text-[11px] ${
-                enableAnimations
+              className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
                   ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
                   : ''
-              } ${
-                activeTab === 'history' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-              } ${enableAnimations && tappedTab === 'history' ? 'scale-110' : ''}`}
+                } ${activeTab === 'history' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                } ${enableAnimations && tappedTab === 'history' ? 'scale-110' : ''}`}
             >
               <History size={18} />
               Riwayat
@@ -826,13 +794,11 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => handleTabClick('profile')}
-              className={`flex flex-col items-center gap-1 text-[11px] ${
-                enableAnimations
+              className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
                   ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
                   : ''
-              } ${
-                activeTab === 'profile' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-              } ${enableAnimations && tappedTab === 'profile' ? 'scale-110' : ''}`}
+                } ${activeTab === 'profile' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                } ${enableAnimations && tappedTab === 'profile' ? 'scale-110' : ''}`}
             >
               <UserIcon size={18} />
               Saya
@@ -840,13 +806,11 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => handleTabClick('settings')}
-              className={`flex flex-col items-center gap-1 text-[11px] ${
-                enableAnimations
+              className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
                   ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
                   : ''
-              } ${
-                activeTab === 'settings' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-              } ${enableAnimations && tappedTab === 'settings' ? 'scale-110' : ''}`}
+                } ${activeTab === 'settings' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                } ${enableAnimations && tappedTab === 'settings' ? 'scale-110' : ''}`}
             >
               <LayoutGrid size={18} />
               Pengaturan
@@ -856,9 +820,9 @@ const App: React.FC = () => {
         </nav>
 
         {/* Transaction Modal */}
-        <TransactionModal 
-          isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
+        <TransactionModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
           onSubmit={handleAddTransaction}
           type={modalType}
           isDarkMode={isDarkMode}
@@ -889,9 +853,8 @@ const App: React.FC = () => {
         {toast && (
           <div className="fixed top-4 left-0 right-0 z-40 flex justify-center px-4">
             <div
-              className={`w-full max-w-sm rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur animate-in slide-in-from-top-6 fade-in duration-500 ${
-                isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
-              }`}
+              className={`w-full max-w-sm rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur animate-in slide-in-from-top-6 fade-in duration-500 ${isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
+                }`}
               style={{
                 transform: `translateY(${toastOffsetY}px)`,
                 opacity: isToastDragging ? 0.9 : 1,
@@ -928,11 +891,10 @@ const App: React.FC = () => {
             >
               <div className="flex items-start gap-3">
                 <div
-                  className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${
-                    toast.type === 'success'
+                  className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${toast.type === 'success'
                       ? 'bg-emerald-500/15 text-emerald-400'
                       : 'bg-rose-500/15 text-rose-400'
-                  }`}
+                    }`}
                 >
                   {toast.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
                 </div>
