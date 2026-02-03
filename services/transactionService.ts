@@ -1,6 +1,8 @@
 import { Transaction, TransactionType } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const envUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
+const API_BASE = envUrl.endsWith('/') ? envUrl.slice(0, envUrl.length - 1) : envUrl;
+console.log('Transaction API_BASE:', API_BASE);
 
 type CreateTransactionInput = {
   userId: string;
