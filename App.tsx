@@ -203,39 +203,49 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Poll for new transactions every 10 seconds
-    const pollInterval = setInterval(async () => {
-      try {
-        const items = await transactionService.listGlobal();
-        const newTransactions = items.filter(t => !seenIdsRef.current.has(t.id));
+    let pollInterval: NodeJS.Timeout | null = null;
 
-        if (newTransactions.length > 0) {
-          // Add new transactions to state
-          newTransactions.forEach(incoming => {
-            seenIdsRef.current.add(incoming.id);
+    // Wait 15 seconds before starting to poll (let initial load finish first)
+    const startPollingTimeout = setTimeout(() => {
+      pollInterval = setInterval(async () => {
+        try {
+          const items = await transactionService.listGlobal();
+          const newTransactions = items.filter(t => !seenIdsRef.current.has(t.id));
 
-            // Show notification for transactions from other users
-            if (incoming.userId && incoming.userId !== user.id) {
-              const title = incoming.type === TransactionType.DEPOSIT ? 'Tabungan Masuk' : 'Penarikan Dana';
-              const amountText = incoming.amount.toLocaleString('id-ID');
-              const actor = incoming.contributorName || 'Seseorang';
-              const body = incoming.type === TransactionType.DEPOSIT
-                ? `${actor} menabung Rp ${amountText}`
-                : `${actor} menarik Rp ${amountText}`;
-              pushNotification(title, body);
-            }
-          });
+          if (newTransactions.length > 0) {
+            // Add new transactions to state
+            newTransactions.forEach(incoming => {
+              seenIdsRef.current.add(incoming.id);
 
-          // Update transactions list
-          setTransactions(items);
+              // Show notification for transactions from other users
+              if (incoming.userId && incoming.userId !== user.id) {
+                const title = incoming.type === TransactionType.DEPOSIT ? 'Tabungan Masuk' : 'Penarikan Dana';
+                const amountText = incoming.amount.toLocaleString('id-ID');
+                const actor = incoming.contributorName || 'Seseorang';
+                const body = incoming.type === TransactionType.DEPOSIT
+                  ? `${actor} menabung Rp ${amountText}`
+                  : `${actor} menarik Rp ${amountText}`;
+                pushNotification(title, body);
+              }
+            });
+
+            // Update transactions list
+            setTransactions(items);
+          }
+        } catch (error) {
+          // Silently log polling errors to avoid spamming console
+          if (error instanceof Error && error.message !== 'Failed to fetch') {
+            console.error('Polling error', error);
+          }
         }
-      } catch (error) {
-        console.error('Polling error', error);
-      }
-    }, 10000); // Poll every 10 seconds
+      }, 10000); // Poll every 10 seconds
+    }, 15000); // Wait 15 seconds before starting
 
     return () => {
-      clearInterval(pollInterval);
+      clearTimeout(startPollingTimeout);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
   }, [user]);
 
@@ -369,8 +379,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => openModal(TransactionType.WITHDRAWAL)}
                     className={`flex-1 font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${isDarkMode
-                        ? 'bg-slate-900 text-rose-300 border-slate-800 hover:bg-slate-800'
-                        : 'bg-white text-rose-600 border-slate-200 hover:bg-rose-50'
+                      ? 'bg-slate-900 text-rose-300 border-slate-800 hover:bg-slate-800'
+                      : 'bg-white text-rose-600 border-slate-200 hover:bg-rose-50'
                       }`}
                   >
                     <Minus size={16} />
@@ -379,8 +389,8 @@ const App: React.FC = () => {
                   <button
                     onClick={() => openModal(TransactionType.DEPOSIT)}
                     className={`flex-[2] font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95 ${isDarkMode
-                        ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500'
-                        : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
+                      ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500'
+                      : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
                       }`}
                   >
                     <Plus size={16} />
@@ -537,8 +547,8 @@ const App: React.FC = () => {
                       type="button"
                       onClick={toggleTheme}
                       className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <span>{isDarkMode ? 'Mode Terang' : 'Mode Gelap'}</span>
@@ -554,8 +564,8 @@ const App: React.FC = () => {
                         localStorage.setItem('savvy_enable_animations', String(next));
                       }}
                       className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <span>Animasi</span>
@@ -573,10 +583,10 @@ const App: React.FC = () => {
                       }`}>
                       <span>Status Push</span>
                       <span className={`text-xs px-2 py-1 rounded-full ${pushStatus === 'enabled'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : pushStatus === 'unsupported'
-                            ? 'bg-slate-900/40 text-slate-400'
-                            : 'bg-rose-500/20 text-rose-300'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : pushStatus === 'unsupported'
+                          ? 'bg-slate-900/40 text-slate-400'
+                          : 'bg-rose-500/20 text-rose-300'
                         }`}>
                         {pushStatus === 'enabled'
                           ? 'Aktif'
@@ -603,8 +613,8 @@ const App: React.FC = () => {
                         }
                       }}
                       className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       Minta Izin Notifikasi
@@ -613,8 +623,8 @@ const App: React.FC = () => {
                       type="button"
                       onClick={handleEnablePush}
                       className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       Aktifkan Push
@@ -630,8 +640,8 @@ const App: React.FC = () => {
                         }
                       }}
                       className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <span>Mute Notifikasi</span>
@@ -643,8 +653,8 @@ const App: React.FC = () => {
                       type="button"
                       onClick={() => setIsNotificationsOpen(true)}
                       className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       Lihat Riwayat Notifikasi
@@ -659,8 +669,8 @@ const App: React.FC = () => {
                       type="button"
                       onClick={() => setIsChangePasswordOpen(true)}
                       className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       Ganti Password
@@ -679,8 +689,8 @@ const App: React.FC = () => {
                         localStorage.setItem('savvy_enable_sounds', String(next));
                       }}
                       className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <span>Suara Notifikasi</span>
@@ -697,8 +707,8 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       className={`w-full rounded-2xl px-4 py-3 flex items-center justify-between text-sm font-semibold transition-all ${isDarkMode
-                          ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <span>Bahasa Indonesia</span>
@@ -726,8 +736,8 @@ const App: React.FC = () => {
                         type="button"
                         onClick={() => setShowSettingsLogoutConfirm(true)}
                         className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-all ${isDarkMode
-                            ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
-                            : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
+                          ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                          : 'bg-rose-50 text-rose-600 hover:bg-rose-100'
                           }`}
                       >
                         Keluar dari Akun
@@ -742,8 +752,8 @@ const App: React.FC = () => {
                             type="button"
                             onClick={() => setShowSettingsLogoutConfirm(false)}
                             className={`flex-1 py-2.5 rounded-xl text-xs font-semibold ${isDarkMode
-                                ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                                : 'bg-white text-slate-600 hover:bg-slate-100'
+                              ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                              : 'bg-white text-slate-600 hover:bg-slate-100'
                               }`}
                           >
                             Batal
@@ -771,8 +781,8 @@ const App: React.FC = () => {
             <button
               onClick={() => handleTabClick('home')}
               className={`flex flex-col items-center gap-1 text-[11px] font-semibold ${enableAnimations
-                  ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
-                  : ''
+                ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
+                : ''
                 } ${activeTab === 'home' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
                 } ${enableAnimations && tappedTab === 'home' ? 'scale-110' : ''}`}
             >
@@ -783,8 +793,8 @@ const App: React.FC = () => {
             <button
               onClick={() => handleTabClick('history')}
               className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
-                  ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
-                  : ''
+                ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
+                : ''
                 } ${activeTab === 'history' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
                 } ${enableAnimations && tappedTab === 'history' ? 'scale-110' : ''}`}
             >
@@ -795,8 +805,8 @@ const App: React.FC = () => {
             <button
               onClick={() => handleTabClick('profile')}
               className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
-                  ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
-                  : ''
+                ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
+                : ''
                 } ${activeTab === 'profile' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
                 } ${enableAnimations && tappedTab === 'profile' ? 'scale-110' : ''}`}
             >
@@ -807,8 +817,8 @@ const App: React.FC = () => {
             <button
               onClick={() => handleTabClick('settings')}
               className={`flex flex-col items-center gap-1 text-[11px] ${enableAnimations
-                  ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
-                  : ''
+                ? 'transition-[transform,color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-95'
+                : ''
                 } ${activeTab === 'settings' ? (isDarkMode ? 'text-white' : 'text-slate-900') : (isDarkMode ? 'text-slate-400' : 'text-slate-500')
                 } ${enableAnimations && tappedTab === 'settings' ? 'scale-110' : ''}`}
             >
@@ -892,8 +902,8 @@ const App: React.FC = () => {
               <div className="flex items-start gap-3">
                 <div
                   className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${toast.type === 'success'
-                      ? 'bg-emerald-500/15 text-emerald-400'
-                      : 'bg-rose-500/15 text-rose-400'
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-rose-500/15 text-rose-400'
                     }`}
                 >
                   {toast.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
